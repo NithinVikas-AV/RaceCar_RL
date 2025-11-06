@@ -4,29 +4,63 @@ import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 
 def make_env():
     def _init():
-        env = gym.make("CarRacing-v3")  # no render_mode here (slows training)
-        env = Monitor(env)              # logs reward/episode length
+        env = gym.make("CarRacing-v3")
+        env = Monitor(env)
         return env
     return _init
 
-num_envs = 8   # adjust based on your CPU
+num_envs = 8
 env = SubprocVecEnv([make_env() for _ in range(num_envs)])
 
-log_path = os.path.join('Learnings', 'Training', 'Logs')
+log_path = os.path.join("Learnings", "Training", "Logs")
+model_save_path = os.path.join("Learnings", "Training", "Saved Models", "PPO_491k_CarRacing_Model")
+os.makedirs(log_path, exist_ok=True)
+os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
-model = PPO("CnnPolicy", env, verbose=1, tensorboard_log=log_path)
+ppo_hyperparams = {
+    "learning_rate": 2.5e-4,
+    "n_steps": 2048,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "verbose": 1,
+    "tensorboard_log": log_path
+}
 
-ppo_path = os.path.join('Learnings', 'Training', 'Saved Models', 'PPO_491k_CarRacing_Model')
+model = PPO("CnnPolicy", env, **ppo_hyperparams)
 
-model.learn(total_timesteps=491520)
-model.save(ppo_path)
+stop_callback = StopTrainingOnRewardThreshold(reward_threshold=360, verbose=1)
 
-# Generate a SHA-256 hash for model integrity verification
-with open(ppo_path + ".zip", "rb") as f:
+eval_env = gym.make("CarRacing-v3")
+eval_callback = EvalCallback(
+    eval_env,
+    callback_on_new_best=stop_callback,
+    best_model_save_path=os.path.join("Learnings", "Training", "Best_Models"),
+    log_path=os.path.join(log_path, "eval"),
+    eval_freq=10000,
+    deterministic=True,
+    render=False
+)
+
+total_timesteps = 491520
+model.learn(total_timesteps=total_timesteps, callback=eval_callback)
+
+model.save(model_save_path)
+
+with open(model_save_path + ".zip", "rb") as f:
     file_bytes = f.read()
     hash_value = hashlib.sha256(file_bytes).hexdigest()
     with open('hash_value.txt', 'w') as hash_file:
         hash_file.write(hash_value)
+
+print("Training complete. Model saved at:", model_save_path)
+print("SHA-256 hash saved in 'hash_value.txt'.")
