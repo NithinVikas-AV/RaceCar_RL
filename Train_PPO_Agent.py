@@ -8,8 +8,8 @@ from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewar
 
 def make_env():
     def _init():
-        env = gym.make("CarRacing-v3")
-        env = Monitor(env)
+        env = gym.make("CarRacing-v3", render_mode='human')
+        env = Monitor(env) # To give more specific information like avg_rewards, etc...
         return env
     return _init
 
